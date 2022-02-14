@@ -1,0 +1,40 @@
+{
+  "config": {
+    "error": {
+      "invalid_auth": "登录失败！"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "username": "用户名/手机号/邮箱",
+          "password": "密码"
+        },
+        "description": "{desc}",
+        "title": "登录"
+      },
+      "select": {
+        "data": {
+          "list": "用电户号列表"
+        },
+        "description": "请勾选需要添加的用电户号",
+        "title": "选择需要添加的用电户号"
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "invalid_path": "The path provided is not valid. Should be in the format `user/repo-name` and should be a valid github repository."
+    },
+    "step": {
+      "init": {
+        "title": "Manage Repos",
+        "data": {
+          "repos": "Existing Repos: Uncheck any repos you want to remove.",
+          "path": "New Repo: Path to the repository e.g. home-assistant/core",
+          "name": "New Repo: Name of the sensor."
+        },
+        "description": "Remove existing repos or add a new repo."
+      }
+    }
+  }
+}

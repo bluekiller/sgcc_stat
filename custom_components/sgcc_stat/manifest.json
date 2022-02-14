@@ -1,0 +1,13 @@
+{
+  "codeowners": [
+    "@bluekiller"
+  ],
+  "dependencies": [],
+  "config_flow": true,
+  "documentation": "https://github.com/bluekiller/sgcc_stat",
+  "domain": "sgcc_stat",
+  "iot_class": "cloud_polling",
+  "name": "国家电网",
+  "requirements": ["gmssl", "requests", "dacite"],
+  "version": "1.0.0"
+}
