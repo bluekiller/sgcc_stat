@@ -24,7 +24,7 @@ class SGCCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """国家电网 config flow."""
 
     def __init__(self):
-        self.data = None
+        self.data = {}
 
     async def async_step_user(self, user_input: Optional[Dict[str, Any]] = None):
         """Invoked when a user initiates a flow via the user interface."""
