@@ -203,7 +203,7 @@ class SGCC:
                     "addressCity": 330100
                 }
             }
-            r = self._post_request("https://osg-web.sgcc.com.cn/api/osg-open-uc0001/member/c8/f23", json.dumps(t))
+            r = self._post_request("https://www.95598.cn/api/osg-open-uc0001/member/c8/f23", json.dumps(t))
             json_resp = json.loads(r)
 
             if json_resp['code'] != 1 or json_resp['data']['srvrt']['resultCode'] != '0000':
@@ -264,7 +264,7 @@ class SGCC:
             "source": "SGAPP",
             "target": power_user.pro_no
         }
-        r = self._post_request('https://osg-web.sgcc.com.cn/api/osg-open-bc0001/member/c05/f01', json.dumps(request))
+        r = self._post_request('https://www.95598.cn/api/osg-open-bc0001/member/c05/f01', json.dumps(request))
         json_resp = json.loads(r)
         if json_resp['code'] == 10015:
             raise AuthorizeTokenExpiredError(json_resp['message'])
@@ -272,7 +272,9 @@ class SGCC:
             raise SGCCNeedLoginError(json_resp['message'])
         if json_resp['code'] != 1:
             raise SGCCError(json_resp['message'])
-        if 'data' not in json_resp or json_resp['data']['rtnCode'] != '1':
+        if 'data' not in json_resp:
+            raise SGCCError('暂无数据')
+        if json_resp['data']['rtnCode'] != '1':
             raise SGCCError('未知错误，错误编码：' + json_resp['data']['rtnCode'])
         if 'list' not in json_resp['data'] or len(json_resp['data']['list']) == 0:
             raise SGCCError('暂无数据')
@@ -321,7 +323,7 @@ class SGCC:
             "source": "app",
             "target": power_user.pro_no
         }
-        return self._post_request("https://osg-web.sgcc.com.cn/api/osg-open-bc0001/member/c01/f02",
+        return self._post_request("https://www.95598.cn/api/osg-open-bc0001/member/c01/f02",
                                   json.dumps(request))
 
     def get_daily_usage(
@@ -391,7 +393,7 @@ class SGCC:
                 },
             "params4": "010103"
         }
-        r = self._post_request("https://osg-web.sgcc.com.cn/api/osg-web0004/member/c24/f01", json.dumps(request))
+        r = self._post_request("https://www.95598.cn/api/osg-web0004/member/c24/f01", json.dumps(request))
         json_resp = json.loads(r)
         if json_resp['code'] == 10015:
             raise AuthorizeTokenExpiredError(json_resp['message'])
@@ -509,7 +511,7 @@ def _get_common_header(encrypt_keys: EncryptKeys = None, access_token: AccessTok
 
 def get_encrypt_key() -> EncryptKeys:
     headers = _get_common_header()
-    r = requests.post("https://osg-web.sgcc.com.cn/api/open/c1/f04", json=_build_generate_key_request(),
+    r = requests.post("https://www.95598.cn/api/open/c1/f04", json=_build_generate_key_request(),
                       headers=headers)
     _LOGGER.debug("get_encrypt_key encrypted result: %s", r.text)
     json_resp = r.json()
@@ -522,7 +524,7 @@ def get_encrypt_key() -> EncryptKeys:
 
 def get_auth_token(encrypt_keys: EncryptKeys) -> AccessToken:
     headers = _get_common_header(encrypt_keys=encrypt_keys)
-    r = requests.post("https://osg-web.sgcc.com.cn/api/open/c2/f04", json=_build_generate_key_request(),
+    r = requests.post("https://www.95598.cn/api/open/c2/f04", json=_build_generate_key_request(),
                       headers=headers)
     _LOGGER.debug("get_auth_token encrypted result: %s", r.text)
     decrypted_data = EncryptUtil.decrypt_sm4_js_data(r.json()['data']['encodeData'])
