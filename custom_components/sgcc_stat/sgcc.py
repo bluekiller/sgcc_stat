@@ -67,12 +67,12 @@ class AccessToken(Updatable):
 @dataclass
 class SGCCPowerUser:
     id: str
-    org_name: str
-    org_no: str
+    #org_name: str
+    #org_no: str
     elec_type_code: str
-    const_type: str
+    #const_type: str
     cons_no: str
-    cons_no_dst: str
+    #cons_no_dst: str
     province_id: str
     pro_no: str
 
@@ -223,12 +223,12 @@ class SGCC:
                     id=_['id'],
                     province_id=_['provinceId'],
                     pro_no=_['proNo'],
-                    org_no=_['orgNo'],
-                    org_name=_['orgName'],
+                    #org_no=_['orgNo'],
+                    #org_name=_['orgName'],
                     elec_type_code=_['elecTypeCode'],
-                    const_type=_['constType'],
+                    #const_type=_['constType'],
                     cons_no=_['consNo'],
-                    cons_no_dst=_['consNo_dst']
+                    #cons_no_dst=_['consNo_dst']
                 )
                 account.power_users.append(power_user)
             self.account = account
