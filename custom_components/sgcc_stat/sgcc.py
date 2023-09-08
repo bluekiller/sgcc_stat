@@ -67,12 +67,12 @@ class AccessToken(Updatable):
 @dataclass
 class SGCCPowerUser:
     id: str
-    #org_name: str
-    #org_no: str
+    org_name: str
+    org_no: str
     elec_type_code: str
-    #const_type: str
+    const_type: str
     cons_no: str
-    #cons_no_dst: str
+    cons_no_dst: str
     province_id: str
     pro_no: str
 
@@ -93,11 +93,11 @@ class SGCCAccount:
 @dataclass
 class AccountBalance:
     date: str  # 2022-02-11 09:31:17
-    esti_amt: str  # 19.11
+    # esti_amt: str  # 19.11
     pro_code: str  # 31102
     sum_money: str  # -19.11
     penalty: str  # 0
-    penalty_end_date: str  # 2022-02-11
+    # penalty_end_date: str  # 2022-02-11
     total_pq: str  # 99
     cons_no: str  # 1379874937
     uuid: str  # osg-uc:150d9042-efc9-4537-8ce1-b7c0c0dda454
@@ -106,8 +106,8 @@ class AccountBalance:
     cons_type: str  # 1
     amt_time: str  # 2022-02-10 14:17:09
     scene_type: str  # 01
-    warning_value: str  #
-    day_num: str  # -11
+    # warning_value: str  #
+    # day_num: str  # -11
 
 
 @dataclass
@@ -218,19 +218,6 @@ class SGCC:
                 token_expiration_date=datetime.datetime.strptime(json_resp['data']['bizrt']['expirationDate'],
                                                                  '%Y%m%d%H%M').isoformat()
             )
-            for _ in user_info['powerUserList']:
-                power_user = SGCCPowerUser(
-                    id=_['id'],
-                    province_id=_['provinceId'],
-                    pro_no=_['proNo'],
-                    #org_no=_['orgNo'],
-                    #org_name=_['orgName'],
-                    elec_type_code=_['elecTypeCode'],
-                    #const_type=_['constType'],
-                    cons_no=_['consNo'],
-                    #cons_no_dst=_['consNo_dst']
-                )
-                account.power_users.append(power_user)
             self.account = account
             return account
         finally:
@@ -252,13 +239,13 @@ class SGCC:
                 "promotType": "1",
                 "promotCode": "1",
                 "userAccountId": self.account.account_name,
-                "list": {
+                "list": [{
                     "consNoSrc": power_user.cons_no_dst,
                     "proCode": power_user.pro_no,
                     "sceneType": power_user.elec_type_code,
                     "consNo": power_user.cons_no,
                     "orgNo": power_user.org_no
-                }
+                }]
             },
             "serviceCode": "0101143",
             "source": "SGAPP",
@@ -281,21 +268,21 @@ class SGCC:
         balance = json_resp['data']['list'][0]
         return AccountBalance(
             date=balance['date'],
-            esti_amt=balance['estiAmt'],
+            # esti_amt=balance['estiAmt'],
             pro_code=balance['proCode'],
             sum_money=balance['sumMoney'],
             penalty=balance['penalty'],
-            penalty_end_date=balance['penaltyEndDate'],
+            # penalty_end_date=balance['penaltyEndDate'],
             total_pq=balance['totalPq'],
             cons_no=balance['consNo'],
             uuid=balance['uuid'],
-            overdue_number=balance['overdueNumber'],
+            overdue_number='overdueNumber',
             prepay_bal=balance['prepayBal'],
             cons_type=balance['consType'],
             amt_time=balance['amtTime'],
             scene_type=balance['sceneType'],
-            warning_value=balance['warningValue'],
-            day_num=balance['dayNum']
+            # warning_value=balance['warningValue'],
+            # day_num=balance['dayNum']
         )
 
     def get_bill_list(self, power_user: SGCCPowerUser, year: str):
@@ -325,6 +312,41 @@ class SGCC:
         }
         return self._post_request("https://www.95598.cn/api/osg-open-bc0001/member/c01/f02",
                                   json.dumps(request))
+
+    def search_user(self):
+        request = {
+            "serviceCode": "01008183",
+            "source": "SGAPP",
+            "target": "23101",
+            "uscInfo": {
+                "member": "0902",
+                "devciceIp": "",
+                "devciceId": "",
+                "tenant": "state_grid"
+            },
+            "quInfo": {
+                "userId": self.account.user_id
+            },
+            "token": self.account.token
+        }
+        r = self._post_request("https://www.95598.cn/api/osg-open-uc0001/member/c9/f02",
+                               json.dumps(request))
+        json_resp = json.loads(r)
+        if json_resp['code'] != 1 or json_resp['data']['srvrt']['resultCode'] != '0000':
+            raise SGCCError(json_resp['data']['srvrt']['resultMessage'])
+        for _ in json_resp['data']['bizrt']['powerUserList']:
+            power_user = SGCCPowerUser(
+                id=_['userId'],
+                province_id=_['provinceId'],
+                pro_no=_['proNo'],
+                org_no=_['orgNo'],
+                org_name=_['orgName'],
+                elec_type_code=_['elecTypeCode'],
+                const_type=_['constType'],
+                cons_no=_['consNo'],
+                cons_no_dst=_['consNo_dst']
+            )
+            self.account.power_users.append(power_user)
 
     def get_daily_usage(
             self, power_user: SGCCPowerUser, start: datetime.date, end: datetime.date
@@ -442,12 +464,12 @@ class EncryptUtil:
     def encrypt_data(str_data: str, public_key: str = PUB_KEY):
         if len(public_key) > 128:
             public_key = public_key[len(public_key) - 128:]
-        sm2_crypt = CryptSM2(None, public_key)
+        sm2_crypt = CryptSM2(None, public_key, mode=1)
         return '04' + sm2_crypt.encrypt(str_data.encode("utf-8").hex().encode("utf-8")).hex()
 
     @staticmethod
     def decrypt_data(hex_str, private_key):
-        sm2_crypt = CryptSM2(private_key, None)
+        sm2_crypt = CryptSM2(private_key, PUB_KEY, mode=1)
         return bytes.fromhex(sm2_crypt.decrypt(bytes.fromhex(hex_str[2:])).decode("utf-8")).decode("utf-8")
 
     @staticmethod
@@ -571,6 +593,7 @@ if __name__ == '__main__':
     _LOGGER.setLevel(logging.DEBUG)
     sgcc = SGCC('xxx', 'xxx')
     sgcc.login()
+    sgcc.search_user()
     # sgcc.get_account_balance(sgcc.account.power_users[0])
     # sgcc.get_bill_list(sgcc.account.power_users[0], '2021')
     sgcc.get_daily_usage(sgcc.account.power_users[0], datetime.date.today() - datetime.timedelta(days=6),
