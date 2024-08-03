@@ -8,6 +8,11 @@
   "domain": "sgcc_stat",
   "iot_class": "cloud_polling",
   "name": "国家电网",
-  "requirements": ["gmssl", "requests", "dacite"],
+  "requirements": [
+    "gmssl",
+    "requests",
+    "dacite",
+    "onnxruntime"
+  ],
   "version": "1.0.0"
 }
