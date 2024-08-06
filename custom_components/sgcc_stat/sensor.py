@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
-    DataUpdateCoordinator,
+    DataUpdateCoordinator, UpdateFailed,
 )
 from .const import *
 from .sgcc import *
@@ -74,7 +74,10 @@ class SGCCCoordinator(SGCCUpdater, DataUpdateCoordinator):
         }
 
     async def _async_update_data(self):
-        return await self.update_data()
+        try:
+            return await self.update_data()
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with API: {err}")
 
 
 class BaseSGCCEntity(SGCCUpdater, SensorEntity):
