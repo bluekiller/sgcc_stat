@@ -53,7 +53,8 @@ class SGCCUpdater:
             await self._sgcc.renew_token(self._session)
             return await self._do_update(self._session)
         except SGCCNeedLoginError:
-            await self._sgcc.login(self._session)
+            if not self._sgcc.account or self._sgcc.account.is_token_expired():
+                await self._sgcc.login(self._session)
             return await self._do_update(self._session)
 
 
