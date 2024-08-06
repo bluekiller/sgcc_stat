@@ -141,7 +141,7 @@ class SGCC:
 
     async def renew_token(self, session):
         if self._data_lock:
-            self._data_lock.acquire()
+            await self._data_lock.acquire()
         try:
             keys: EncryptKeys = self._keys_and_token.get('keys')
             token: AccessToken = self._keys_and_token.get('token')
@@ -184,7 +184,7 @@ class SGCC:
 
     async def get_verification_code(self, session: ClientSession):
         if self._data_lock:
-            self._data_lock.acquire()
+            await self._data_lock.acquire()
         try:
             username = self.username if self.username else self.account.account_name
             if self.password:
@@ -216,7 +216,7 @@ class SGCC:
         await self.renew_token(session)
 
         if self._data_lock:
-            self._data_lock.acquire()
+            await self._data_lock.acquire()
         try:
             username = self.username if self.username else self.account.account_name
             if self.password:
