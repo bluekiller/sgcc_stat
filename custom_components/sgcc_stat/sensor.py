@@ -17,7 +17,7 @@ from .const import *
 from .sgcc import *
 
 _LOGGER = logging.getLogger(__name__)
-_LOCK = threading.Lock()
+_LOCK = asyncio.Lock()
 SCAN_INTERVAL = datetime.timedelta(minutes=30)
 
 

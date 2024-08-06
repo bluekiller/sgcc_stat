@@ -8,7 +8,6 @@ import datetime
 import hashlib
 import json
 import logging
-import threading
 import time
 from io import BytesIO
 from typing import List
@@ -128,7 +127,7 @@ class DailyPowerConsumption:
 
 class SGCC:
     def __init__(self, username: str = None, password: str = None, account: SGCCAccount = None,
-                 data_lock: threading.Lock = None, keys_and_token=None):
+                 data_lock: asyncio.Lock = None, keys_and_token=None):
         if keys_and_token is None:
             keys_and_token = dict()
         self.username = username
