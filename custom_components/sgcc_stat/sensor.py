@@ -142,7 +142,7 @@ class SGCCAccountBalanceSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: SGCCCoordinator):
         super().__init__(coordinator)
         self._account_balance: AccountBalance | None = None
-        self._attr_name = f"账户余额(户号: {self._power_user.cons_no_dst})"
+        self._attr_name = f"账户余额(户号: {coordinator.power_user.cons_no_dst})"
         self._attr_native_unit_of_measurement = '元'
 
     def has_data(self):
