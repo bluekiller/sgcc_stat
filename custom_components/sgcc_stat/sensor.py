@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import aiohttp
 from dacite import from_dict
 from homeassistant.components.sensor import STATE_CLASS_TOTAL_INCREASING, SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -12,7 +13,6 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
-
 from .const import *
 from .sgcc import *
 
