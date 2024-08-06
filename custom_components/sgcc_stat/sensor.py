@@ -149,7 +149,7 @@ class SGCCAccountBalanceSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = '元'
 
     def has_data(self):
-        return self.coordinator.data and self.coordinator.data["account_balance"] > 0
+        return self.coordinator.data and self.coordinator.data["account_balance"]
 
     def get_account_balance(self) -> AccountBalance:
         return self.coordinator.data["account_balance"]
