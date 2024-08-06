@@ -101,10 +101,13 @@ class PowerConsumptionSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = ENERGY_KILO_WATT_HOUR
 
     def has_data(self):
-        return self.coordinator.data and len(self.coordinator.data) > 0
+        return self.coordinator.data and len(self.coordinator.data['daily_usage']) > 0
 
     def get_consumption(self) -> DailyPowerConsumption:
-        return self.coordinator.data[0]["daily_usage"]
+        return self.get_data()[0]
+
+    def get_data(self):
+        return self.coordinator.data["daily_usage"]
 
     @property
     def native_value(self):
@@ -113,7 +116,7 @@ class PowerConsumptionSensor(CoordinatorEntity, SensorEntity):
             return self.get_consumption().day_ele_pq if self.has_data() else None
         if self._cycle == CYCLE_MONTHLY:
             _LOGGER.debug(str(self.coordinator.data))
-            return sum(_.day_ele_pq for _ in self.coordinator.data) if self.coordinator.data else None
+            return sum(_.day_ele_pq for _ in self.get_data()) if self.get_data() else None
 
     @property
     def extra_state_attributes(self):
@@ -121,11 +124,11 @@ class PowerConsumptionSensor(CoordinatorEntity, SensorEntity):
             return dataclasses.asdict(self.get_consumption()) if self.has_data() else None
         if self._cycle == CYCLE_MONTHLY:
             return {
-                'period': f"{self.coordinator.data[-1].day}~{self.coordinator.data[0].day}",
-                'n_pq': sum(_.n_pq for _ in self.coordinator.data),
-                'v_pq': sum(_.v_pq for _ in self.coordinator.data),
-                'p_pq': sum(_.p_pq for _ in self.coordinator.data),
-                't_pq': sum(_.t_pq for _ in self.coordinator.data)
+                'period': f"{self.get_data()[-1].day}~{self.get_data()[0].day}",
+                'n_pq': sum(_.n_pq for _ in self.get_data()),
+                'v_pq': sum(_.v_pq for _ in self.get_data()),
+                'p_pq': sum(_.p_pq for _ in self.get_data()),
+                't_pq': sum(_.t_pq for _ in self.get_data())
             } if self.has_data() else None
         return None
 
@@ -146,10 +149,10 @@ class SGCCAccountBalanceSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = '元'
 
     def has_data(self):
-        return self.coordinator.data and len(self.coordinator.data) > 0
+        return self.coordinator.data and self.coordinator.data["account_balance"] > 0
 
     def get_account_balance(self) -> AccountBalance:
-        return self.coordinator.data[0]["account_balance"]
+        return self.coordinator.data["account_balance"]
 
     @property
     def native_value(self):
