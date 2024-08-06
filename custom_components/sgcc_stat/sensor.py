@@ -34,7 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
             entities.append(PowerConsumptionSensor(coordinator, CYCLE_DAILY))
             entities.append(PowerConsumptionSensor(coordinator, CYCLE_MONTHLY))
             # await coordinator.async_config_entry_first_refresh()
-    async_add_entities(entities, True)
+    await async_add_entities(entities, True)
     _LOGGER.debug("Sensor entry setup finished")
     return True
 
@@ -43,17 +43,18 @@ class SGCCUpdater:
 
     def __init__(self, api: SGCC):
         self._sgcc = api
+        self._session = aiohttp.ClientSession()
 
-    def _do_update(self) -> Any:
+    async def _do_update(self, session: ClientSession) -> Any:
         ...
 
-    def update_data(self):
+    async def update_data(self):
         try:
-            self._sgcc.renew_token()
-            return self._do_update()
+            await self._sgcc.renew_token(self._session)
+            return await self._do_update(self._session)
         except SGCCNeedLoginError:
-            self._sgcc.login()
-            return self._do_update()
+            await self._sgcc.login(self._session)
+            return await self._do_update(self._session)
 
 
 class PowerConsumptionCoordinator(SGCCUpdater, DataUpdateCoordinator):
@@ -64,13 +65,13 @@ class PowerConsumptionCoordinator(SGCCUpdater, DataUpdateCoordinator):
                                        update_interval=datetime.timedelta(hours=1))
         self.power_user = power_user
 
-    def _do_update(self):
+    async def _do_update(self, session: ClientSession):
         start = datetime.date.today().replace(day=1)
         end = datetime.date.today()
-        return self._sgcc.get_daily_usage(self.power_user, start, end)
+        return await self._sgcc.get_daily_usage(self.power_user, start, end, session)
 
     async def _async_update_data(self):
-        return await self.hass.async_add_executor_job(self.update_data)
+        return await self.update_data()
 
 
 class BaseSGCCEntity(SGCCUpdater, SensorEntity):
@@ -81,7 +82,7 @@ class BaseSGCCEntity(SGCCUpdater, SensorEntity):
         self._attr_unique_id = f"{self._power_user.id}_{sensor_type}"
 
     async def async_update(self):
-        await self.hass.async_add_executor_job(self.update_data)
+        await self.update_data()
 
 
 class PowerConsumptionSensor(CoordinatorEntity, SensorEntity):
@@ -150,5 +151,5 @@ class SGCCAccountBalanceSensor(BaseSGCCEntity):
     def extra_state_attributes(self):
         return dataclasses.asdict(self._account_balance) if self._account_balance else None
 
-    def _do_update(self):
-        self._account_balance = self._sgcc.get_account_balance(self._power_user)
+    async def _do_update(self, session: ClientSession):
+        self._account_balance = await self._sgcc.get_account_balance(self._power_user, session)

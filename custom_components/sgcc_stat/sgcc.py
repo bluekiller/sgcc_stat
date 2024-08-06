@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import dataclasses
+import os
 import re
 from dataclasses import dataclass
 import datetime
@@ -10,18 +11,14 @@ import logging
 import threading
 import time
 from io import BytesIO
-from random import random
 from typing import List
-
-import ddddocr
 from PIL import Image
+from aiohttp import ClientSession
 from gmssl import func
 from gmssl.sm2 import CryptSM2
 from gmssl.sm3 import sm3_hash
 from gmssl.sm4 import SM4_DECRYPT, SM4_ENCRYPT, CryptSM4
-import requests
-
-from onnx import ONNX
+from .onnx import ONNX
 
 SM4_KEY = '54fe588bf24b88f09e7ff0b2da2d27a8'
 PUB_KEY = '042BC7AD510BF9793B7744C8854C56A8C95DD1027EE619247A332EC6ED5B279F435A23D62441FE861F4B0C963347ECD5792F380B64CA084BE8BE41151F8B8D19C8'
@@ -139,16 +136,18 @@ class SGCC:
         self.account = account
         self._keys_and_token = keys_and_token
         self._data_lock = data_lock
-        self.onnx = ONNX("./captcha.onnx")
+        component_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(component_dir, 'captcha.onnx')
+        self.onnx = ONNX(path)
 
-    def renew_token(self):
+    async def renew_token(self, session):
         if self._data_lock:
             self._data_lock.acquire()
         try:
             keys: EncryptKeys = self._keys_and_token.get('keys')
             token: AccessToken = self._keys_and_token.get('token')
             if not keys:
-                keys = get_encrypt_key()
+                keys = await get_encrypt_key(session)
                 self._keys_and_token['keys'] = keys
 
             # if not token:
@@ -163,18 +162,20 @@ class SGCC:
             if self._data_lock:
                 self._data_lock.release()
 
-    def _post_request(self, url: str, request: str) -> dict:
+    async def _post_request(self, url: str, request: str, session: ClientSession) -> dict:
         headers = _get_common_header(self._get_keys(), self._get_token(), self.account)
         _LOGGER.debug("post request to %s", url)
         _LOGGER.debug("headers: %s", headers)
         _LOGGER.debug("original request: %s", request)
         encrypted_request = EncryptUtil.encrypt_request(request, self._get_keys(), self._get_token(), self.account)
         _LOGGER.debug("encrypted request: %s", encrypted_request)
-        r = requests.post(url, data=encrypted_request, headers=headers)
-        _LOGGER.debug("original response: %s", r.text)
-        response = EncryptUtil.decrypt_sm4_js_data(r.json()['encryptData'], self._get_keys().key_code)
-        _LOGGER.debug("decrypted response: %s", response)
-        return response
+        async with session.post(url, data=encrypted_request, headers=headers) as r:
+            resp_txt = await r.text()
+            _LOGGER.debug("original response: %s", resp_txt)
+            resp_json = json.loads(resp_txt)
+            response = EncryptUtil.decrypt_sm4_js_data(resp_json['encryptData'], self._get_keys().key_code)
+            _LOGGER.debug("decrypted response: %s", response)
+            return response
 
     def _get_keys(self) -> EncryptKeys:
         return self._keys_and_token.get('keys')
@@ -182,7 +183,7 @@ class SGCC:
     def _get_token(self) -> AccessToken:
         return self._keys_and_token.get('token')
 
-    def get_verification_code(self):
+    async def get_verification_code(self, session: ClientSession):
         if self._data_lock:
             self._data_lock.acquire()
         try:
@@ -199,7 +200,8 @@ class SGCC:
                 "canvasHeight": 200,
                 "canvasWidth": 410
             }
-            response = self._post_request("https://www.95598.cn/api/osg-web0004/open/c44/f05", json.dumps(request))
+            response = await self._post_request("https://www.95598.cn/api/osg-web0004/open/c44/f05",
+                                                json.dumps(request), session)
             base64_data = re.sub('^data:image/.+;base64,', '', response['data']['canvasSrc'])
             byte_data = base64.b64decode(base64_data)
             image_data = BytesIO(byte_data)
@@ -211,8 +213,8 @@ class SGCC:
             if self._data_lock:
                 self._data_lock.release()
 
-    async def login(self) -> SGCCAccount:
-        self.renew_token()
+    async def login(self, session: ClientSession) -> SGCCAccount:
+        await self.renew_token(session)
 
         if self._data_lock:
             self._data_lock.acquire()
@@ -226,7 +228,7 @@ class SGCC:
                 password = self.account.password_hash
 
             # login_key = str(random())
-            code = self.get_verification_code()
+            code = await self.get_verification_code(session)
 
             t = {
                 "uscInfo": {
@@ -252,7 +254,7 @@ class SGCC:
             }
 
             await asyncio.sleep(3)
-            r = self._post_request("https://www.95598.cn/api/osg-web0004/open/c44/f06", json.dumps(s))
+            r = await self._post_request("https://www.95598.cn/api/osg-web0004/open/c44/f06", json.dumps(s), session)
 
             if r['code'] != 1 or r['data']['srvrt']['resultCode'] != '0000':
                 message = r.get("message")
@@ -269,8 +271,8 @@ class SGCC:
                 token_expiration_date=datetime.datetime.strptime(r['data']['bizrt']['expirationDate'],
                                                                  '%Y%m%d%H%M').isoformat()
             )
-            auth_code = get_auth_code(self._get_keys(), account.token)
-            access_token = get_auth_token(self._get_keys(), auth_code)
+            auth_code = await get_auth_code(self._get_keys(), account.token, session)
+            access_token = await get_auth_token(self._get_keys(), auth_code, session)
             self._keys_and_token["token"] = access_token
             self.account = account
             return account
@@ -278,7 +280,7 @@ class SGCC:
             if self._data_lock:
                 self._data_lock.release()
 
-    def get_account_balance(self, power_user: SGCCPowerUser) -> AccountBalance:
+    async def get_account_balance(self, power_user: SGCCPowerUser, session: ClientSession) -> AccountBalance:
         if not self.account or self.account.is_token_expired():
             raise SGCCNeedLoginError()
 
@@ -305,7 +307,8 @@ class SGCC:
             "source": "SGAPP",
             "target": power_user.pro_no
         }
-        r = self._post_request('https://www.95598.cn/api/osg-open-bc0001/member/c05/f01', json.dumps(request))
+        r = await self._post_request('https://www.95598.cn/api/osg-open-bc0001/member/c05/f01', json.dumps(request),
+                                     session)
         if r['code'] == 10015:
             raise AuthorizeTokenExpiredError(r['message'])
         if r['code'] == 10002:
@@ -338,7 +341,7 @@ class SGCC:
             # day_num=balance['dayNum']
         )
 
-    def get_bill_list(self, power_user: SGCCPowerUser, year: str):
+    async def get_bill_list(self, power_user: SGCCPowerUser, year: str, session: ClientSession):
         if not self.account or self.account.is_token_expired():
             raise SGCCNeedLoginError()
 
@@ -366,10 +369,10 @@ class SGCC:
             "source": "app",
             "target": power_user.pro_no
         }
-        return self._post_request("https://www.95598.cn/api/osg-open-bc0001/member/c01/f02",
-                                  json.dumps(request))
+        return await self._post_request("https://www.95598.cn/api/osg-open-bc0001/member/c01/f02",
+                                        json.dumps(request), session)
 
-    def search_user(self):
+    async def search_user(self, session: ClientSession):
         if not self.account or self.account.is_token_expired():
             raise SGCCNeedLoginError()
         request = {
@@ -387,8 +390,8 @@ class SGCC:
             },
             "token": self.account.token
         }
-        r = self._post_request("https://www.95598.cn/api/osg-open-uc0001/member/c9/f02",
-                               json.dumps(request))
+        r = await self._post_request("https://www.95598.cn/api/osg-open-uc0001/member/c9/f02",
+                                     json.dumps(request), session)
         if r['code'] != 1 or r['data']['srvrt']['resultCode'] != '0000':
             raise SGCCError(r['data']['srvrt']['resultMessage'])
         for _ in r['data']['bizrt']['powerUserList']:
@@ -405,9 +408,9 @@ class SGCC:
             )
             self.account.power_users.append(power_user)
 
-    def get_daily_usage(
+    async def get_daily_usage(
             self, power_user: SGCCPowerUser, start: datetime.date, end: datetime.date
-    ) -> List[DailyPowerConsumption]:
+            , session: ClientSession) -> List[DailyPowerConsumption]:
         if not self.account or self.account.is_token_expired():
             raise SGCCNeedLoginError()
 
@@ -475,7 +478,8 @@ class SGCC:
                 },
             "params4": "010103"
         }
-        json_resp = self._post_request("https://www.95598.cn/api/osg-web0004/member/c24/f01", json.dumps(request))
+        json_resp = await self._post_request("https://www.95598.cn/api/osg-web0004/member/c24/f01", json.dumps(request),
+                                             session)
         if json_resp['code'] == 10015:
             raise AuthorizeTokenExpiredError(json_resp['message'])
         if json_resp['code'] == 10002:
@@ -500,16 +504,6 @@ class SGCC:
                     )
                 )
         return daily_usage_list
-
-    def get_login_verification_code(self, login_key):
-        request = '{"loginKey":"' + login_key + '"}'
-        response = self._post_request("https://www.95598.cn/api/osg-web0004/open/c44/f01", request)
-        if response.get('data'):
-            _, base64_string = response['data']['code'].split(";base64,")
-            image_bytes = base64.b64decode(base64_string)
-            ocr = ddddocr.DdddOcr()
-            return ocr.classification(image_bytes)
-        raise SGCCError("Failed to get login verification code")
 
 
 class EncryptUtil:
@@ -626,20 +620,22 @@ def _get_common_header(encrypt_keys: EncryptKeys = None, access_token: AccessTok
     return headers.copy()
 
 
-def get_encrypt_key() -> EncryptKeys:
+async def get_encrypt_key(session) -> EncryptKeys:
     headers = _get_common_header()
+    session
     headers.pop("t", None)
     data = _build_generate_key_request()
     _LOGGER.debug(headers)
     _LOGGER.debug(data)
-    r = requests.post("https://www.95598.cn/api/oauth2/outer/c02/f02", json=data, headers=headers)
-    _LOGGER.debug("get_encrypt_key encrypted result: %s", r.text)
-    json_resp = r.json()
-    if not json_resp.get('encryptData'):
-        raise SGCCError(json_resp.get('message'))
-    decrypted_data = EncryptUtil.decrypt_sm4_js_data(r.json()['encryptData'])
-    _LOGGER.debug("get_encrypt_key result: %s", decrypted_data)
-    return EncryptKeys(decrypted_data['data']['keyCode'], "", decrypted_data['data']['publicKey'])
+    async with session.post("https://www.95598.cn/api/oauth2/outer/c02/f02", json=data, headers=headers) as r:
+        resp_txt = await r.text()
+        _LOGGER.debug("get_encrypt_key encrypted result: %s", resp_txt)
+        json_resp = json.loads(resp_txt)
+        if not json_resp.get('encryptData'):
+            raise SGCCError(json_resp.get('message'))
+        decrypted_data = EncryptUtil.decrypt_sm4_js_data(json_resp['encryptData'])
+        _LOGGER.debug("get_encrypt_key result: %s", decrypted_data)
+        return EncryptKeys(decrypted_data['data']['keyCode'], "", decrypted_data['data']['publicKey'])
 
 
 def _build_get_token_request(encrypt_keys: EncryptKeys, authorize_code: str):
@@ -666,21 +662,20 @@ def _build_get_token_request(encrypt_keys: EncryptKeys, authorize_code: str):
     return encrpyt_req
 
 
-def get_auth_token(encrypt_keys: EncryptKeys, authorize_code: str) -> AccessToken:
+async def get_auth_token(encrypt_keys: EncryptKeys, authorize_code: str, session: ClientSession) -> AccessToken:
     headers = _get_common_header(encrypt_keys=encrypt_keys)
     headers.pop("t", None)
     request = _build_get_token_request(encrypt_keys, authorize_code)
     _LOGGER.debug("get_auth_token headers: %s", headers)
     _LOGGER.debug("get_auth_token encrypted request: %s", request)
-    r = requests.post("https://www.95598.cn/api/oauth2/outer/getWebToken",
-                      json=request,
-                      headers=headers)
-    _LOGGER.debug("get_auth_token encrypted result: %s", r.text)
-    decrypted_data = EncryptUtil.decrypt_sm4_js_data(r.json()['encryptData'], encrypt_keys.key_code)
-    _LOGGER.debug("get_auth_token result: %s", decrypted_data)
-    return AccessToken(decrypted_data['data']['access_token'], APP_KEY,
-                       datetime.datetime.fromtimestamp(
-                           time.time() + int(decrypted_data['data']['expiresIn'])).isoformat())
+    async with session.post("https://www.95598.cn/api/oauth2/outer/getWebToken", json=request, headers=headers) as r:
+        resp_txt = await r.text()
+        _LOGGER.debug("get_auth_token encrypted result: %s", resp_txt)
+        decrypted_data = EncryptUtil.decrypt_sm4_js_data(json.loads(resp_txt)['encryptData'], encrypt_keys.key_code)
+        _LOGGER.debug("get_auth_token result: %s", decrypted_data)
+        return AccessToken(decrypted_data['data']['access_token'], APP_KEY,
+                           datetime.datetime.fromtimestamp(
+                               time.time() + int(decrypted_data['data']['expiresIn'])).isoformat())
 
 
 def _build_get_auth_code_request(token):
@@ -688,47 +683,22 @@ def _build_get_auth_code_request(token):
     return request
 
 
-def get_auth_code(encrypt_keys: EncryptKeys, token) -> str:
+async def get_auth_code(encrypt_keys: EncryptKeys, token: str, session: ClientSession) -> str:
     headers = _get_common_header(encrypt_keys=encrypt_keys)
     headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8'
     headers.pop("t", None)
     _LOGGER.debug("get_auth_code headers: %s", headers)
     request = _build_get_auth_code_request(token)
     _LOGGER.debug("get_auth_code request: %s", request)
-    r = requests.post("https://www.95598.cn/api/oauth2/oauth/authorize",
-                      data=request,
-                      headers=headers)
-    _LOGGER.debug("get_auth_code encrypted result: %s", r.text)
-    decrypted_data = EncryptUtil.decrypt_sm4_js_data(r.json()['data'], token)
-    _LOGGER.debug("get_auth_code result: %s", decrypted_data)
-    if decrypted_data['code'] == '1':
-        _, auth_code = decrypted_data['data']['redirect_url'].split('code=')
-        return auth_code
-    else:
-        raise SGCCError(decrypted_data.get('message') or '获取Authorize Code失败！')
+    async with session.post("https://www.95598.cn/api/oauth2/oauth/authorize", data=request,
+                            headers=headers) as r:
+        resp_txt = await r.text()
+        _LOGGER.debug("get_auth_code encrypted result: %s", resp_txt)
 
-
-if __name__ == '__main__':
-    logging.basicConfig()
-    logging.getLogger().setLevel(logging.WARN)
-    _LOGGER.setLevel(logging.DEBUG)
-    _LOGGER.debug(EncryptUtil.encrypt_sm4_js_data(b"pfwu"))
-    _LOGGER.debug(EncryptUtil.sign_data(b'pfwu'))
-    _LOGGER.debug((EncryptUtil.encrypt_data("109271157578032142359501226074660",
-                                            "04B7F37B4B50AF4755995472841A1D03CE40067B818D23F099FFDDF34B9228947387497648D23C741F87F8C11C2EE840A257CDED027C2E58E741F9EC87FA12D35B")))
-    e = EncryptUtil.encrypt_sm4_js_data(
-        b'{\n                            "_access_token": "",\n                            "_t": "",\n                            "_data": {"loginKey":"0.965517272783712"},\n                            "timestamp": 1695788711820\n                            }',
-        "109271157578032142359501226074660")
-    _LOGGER.debug(EncryptUtil.sign_data(e + b'1695788711820'))
-    # encrypt_keys = get_encrypt_key()
-    sgcc = SGCC('xxx', 'xxx')
-    sgcc.renew_token()
-    asyncio.run(sgcc.login())
-
-    # sgcc.login()
-    sgcc.search_user()
-    sgcc.get_account_balance(sgcc.account.power_users[0])
-    sgcc.get_bill_list(sgcc.account.power_users[0], '2024')
-    sgcc.get_daily_usage(sgcc.account.power_users[0], datetime.date.today() - datetime.timedelta(days=6),
-                         datetime.date.today())
-    sgcc.get_bill_list(sgcc.account.power_users[0], '2024')
+        decrypted_data = EncryptUtil.decrypt_sm4_js_data(json.loads(resp_txt)['data'], token)
+        _LOGGER.debug("get_auth_code result: %s", decrypted_data)
+        if decrypted_data['code'] == '1':
+            _, auth_code = decrypted_data['data']['redirect_url'].split('code=')
+            return auth_code
+        else:
+            raise SGCCError(decrypted_data.get('message') or '获取Authorize Code失败！')
