@@ -125,6 +125,10 @@ class DailyPowerConsumption:
     t_pq: float
 
 
+MAX_RETRIES = 3  # Maximum number of retries
+RETRY_DELAY = 5  # Delay between retries in seconds
+
+
 class SGCC:
     def __init__(self, username: str = None, password: str = None, account: SGCCAccount = None,
                  data_lock: asyncio.Lock = None, keys_and_token=None):
@@ -143,20 +147,18 @@ class SGCC:
         if self._data_lock:
             await self._data_lock.acquire()
         try:
-            keys: EncryptKeys = self._keys_and_token.get('keys')
-            token: AccessToken = self._keys_and_token.get('token')
+            keys: EncryptKeys = self._get_keys()
+            token: AccessToken = self._get_token()
             if not keys:
                 keys = await get_encrypt_key(session)
                 self._keys_and_token['keys'] = keys
 
-            # if not token:
-            #     authorize_code = get_auth_code(keys)
-            #     token = get_auth_token(keys)
-            #     self._keys_and_token['token'] = token
+            if (token is None or token.expired()) and self.account and not self.account.is_token_expired():
+                _LOGGER.info("trying to renew access token")
+                auth_code = await get_auth_code(keys, self.account.token, session)
+                token = await get_auth_token(keys, auth_code, session)
+                self._keys_and_token['token'] = token
 
-            # if token.expired():
-            #     keys.update(dataclasses.asdict(get_encrypt_key()))
-            #     token.update(dataclasses.asdict(get_auth_token(keys)))
         finally:
             if self._data_lock:
                 self._data_lock.release()
@@ -207,69 +209,80 @@ class SGCC:
         return {"code": distance, "login_key": response['data']['ticket']}
 
     async def login(self, session: ClientSession) -> SGCCAccount:
-        if self._data_lock:
-            await self._data_lock.acquire()
-        try:
-            username = self.username if self.username else self.account.account_name
-            if self.password:
-                hl = hashlib.md5()
-                hl.update(self.password.encode("utf-8"))
-                password = hl.hexdigest()
-            else:
-                password = self.account.password_hash
-
-            # login_key = str(random())
-            code = await self.get_verification_code(session)
-
-            t = {
-                "uscInfo": {
-                    "devciceIp": "",
-                    "tenant": "state_grid",
-                    "member": "0902",
-                    "devciceId": ""
-                },
-                "quInfo": {
-                    "optSys": "android",
-                    "pushId": "000000",
-                    "addressProvince": 110100,
-                    "password": password.upper(),
-                    "addressRegion": 110101,
-                    "account": username,
-                    "addressCity": 330100
-                }
-            }
-            s = {
-                "loginKey": code['login_key'],
-                "code": round(code['code']),
-                "params": t
-            }
-
-            await asyncio.sleep(3)
-            r = await self._post_request("https://www.95598.cn/api/osg-web0004/open/c44/f06", json.dumps(s), session)
-
-            if r['code'] != 1 or r['data']['srvrt']['resultCode'] != '0000':
-                message = r.get("message")
-                if r.get("data"):
-                    message = r['data']['srvrt']['resultMessage']
-                raise SGCCLoginError(message)
-
-            user_info = r['data']['bizrt']['userInfo'][0]
-            account = SGCCAccount(
-                password_hash=password,
-                account_name=user_info['loginAccount'],
-                user_id=user_info['userId'],
-                token=r['data']['bizrt']['token'],
-                token_expiration_date=datetime.datetime.strptime(r['data']['bizrt']['expirationDate'],
-                                                                 '%Y%m%d%H%M').isoformat()
-            )
-            auth_code = await get_auth_code(self._get_keys(), account.token, session)
-            access_token = await get_auth_token(self._get_keys(), auth_code, session)
-            self._keys_and_token["token"] = access_token
-            self.account = account
-            return account
-        finally:
+        attempt = 0
+        while attempt < MAX_RETRIES:
+            attempt += 1
             if self._data_lock:
-                self._data_lock.release()
+                await self._data_lock.acquire()
+            try:
+                if self._sgcc.account and not self._sgcc.account.is_token_expired():
+                    return self.account
+                username = self.username if self.username else self.account.account_name
+                if self.password:
+                    hl = hashlib.md5()
+                    hl.update(self.password.encode("utf-8"))
+                    password = hl.hexdigest()
+                else:
+                    password = self.account.password_hash
+
+                # login_key = str(random())
+                code = await self.get_verification_code(session)
+
+                t = {
+                    "uscInfo": {
+                        "devciceIp": "",
+                        "tenant": "state_grid",
+                        "member": "0902",
+                        "devciceId": ""
+                    },
+                    "quInfo": {
+                        "optSys": "android",
+                        "pushId": "000000",
+                        "addressProvince": 110100,
+                        "password": password.upper(),
+                        "addressRegion": 110101,
+                        "account": username,
+                        "addressCity": 330100
+                    }
+                }
+                s = {
+                    "loginKey": code['login_key'],
+                    "code": round(code['code']),
+                    "params": t
+                }
+
+                await asyncio.sleep(3)
+                r = await self._post_request("https://www.95598.cn/api/osg-web0004/open/c44/f06", json.dumps(s),
+                                             session)
+
+                if r['code'] != 1 or r['data']['srvrt']['resultCode'] != '0000':
+                    message = r.get("message")
+                    if r.get("data"):
+                        message = r['data']['srvrt']['resultMessage']
+                    raise SGCCLoginError(message)
+
+                user_info = r['data']['bizrt']['userInfo'][0]
+                account = SGCCAccount(
+                    password_hash=password,
+                    account_name=user_info['loginAccount'],
+                    user_id=user_info['userId'],
+                    token=r['data']['bizrt']['token'],
+                    token_expiration_date=datetime.datetime.strptime(r['data']['bizrt']['expirationDate'],
+                                                                     '%Y%m%d%H%M').isoformat()
+                )
+                auth_code = await get_auth_code(self._get_keys(), account.token, session)
+                access_token = await get_auth_token(self._get_keys(), auth_code, session)
+                self._keys_and_token["token"] = access_token
+                self.account = account
+                return account
+            except Exception as e:
+                _LOGGER.error(f"Login attempt {attempt} failed: {e}")
+                if attempt >= MAX_RETRIES:
+                    raise e  # Re-raise the last exception if max retries exceeded
+                await asyncio.sleep(RETRY_DELAY)
+            finally:
+                if self._data_lock:
+                    self._data_lock.release()
 
     async def get_account_balance(self, power_user: SGCCPowerUser, session: ClientSession) -> AccountBalance:
         if not self.account or self.account.is_token_expired():

@@ -29,8 +29,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
     for _ in account.power_users:
         if _.id in config_entry.data.get('selected_power_users'):
             api = SGCC(account=account, keys_and_token=hass.data, data_lock=_LOCK)
-            entities.append(SGCCAccountBalanceSensor(api, _))
-            coordinator = PowerConsumptionCoordinator(api, _, hass)
+            coordinator = SGCCCoordinator(api, _, hass)
+            entities.append(SGCCAccountBalanceSensor(coordinator))
             entities.append(PowerConsumptionSensor(coordinator, CYCLE_DAILY))
             entities.append(PowerConsumptionSensor(coordinator, CYCLE_MONTHLY))
             # await coordinator.async_config_entry_first_refresh()
@@ -53,12 +53,11 @@ class SGCCUpdater:
             await self._sgcc.renew_token(self._session)
             return await self._do_update(self._session)
         except SGCCNeedLoginError:
-            if not self._sgcc.account or self._sgcc.account.is_token_expired():
-                await self._sgcc.login(self._session)
+            await self._sgcc.login(self._session)
             return await self._do_update(self._session)
 
 
-class PowerConsumptionCoordinator(SGCCUpdater, DataUpdateCoordinator):
+class SGCCCoordinator(SGCCUpdater, DataUpdateCoordinator):
 
     def __init__(self, api: SGCC, power_user: SGCCPowerUser, hass: HomeAssistant):
         SGCCUpdater.__init__(self, api)
@@ -69,7 +68,10 @@ class PowerConsumptionCoordinator(SGCCUpdater, DataUpdateCoordinator):
     async def _do_update(self, session: ClientSession):
         start = datetime.date.today().replace(day=1)
         end = datetime.date.today()
-        return await self._sgcc.get_daily_usage(self.power_user, start, end, session)
+        return {
+            "daily_usage": await self._sgcc.get_daily_usage(self.power_user, start, end, session),
+            "account_balance": await self._sgcc.get_account_balance(self.power_user, session)
+        }
 
     async def _async_update_data(self):
         return await self.update_data()
@@ -88,7 +90,7 @@ class BaseSGCCEntity(SGCCUpdater, SensorEntity):
 
 class PowerConsumptionSensor(CoordinatorEntity, SensorEntity):
 
-    def __init__(self, coordinator: PowerConsumptionCoordinator, cycle: str):
+    def __init__(self, coordinator: SGCCCoordinator, cycle: str):
         super().__init__(coordinator)
         self._cycle = cycle
         self._consumption: DailyPowerConsumption | None = None
@@ -102,7 +104,7 @@ class PowerConsumptionSensor(CoordinatorEntity, SensorEntity):
         return self.coordinator.data and len(self.coordinator.data) > 0
 
     def get_consumption(self) -> DailyPowerConsumption:
-        return self.coordinator.data[0]
+        return self.coordinator.data[0]["daily_usage"]
 
     @property
     def native_value(self):
@@ -135,22 +137,25 @@ class PowerConsumptionSensor(CoordinatorEntity, SensorEntity):
     #         return datetime.datetime.strptime(self.coordinator.data[-1].day, '%Y%m%d') if self.has_data() else None
 
 
-class SGCCAccountBalanceSensor(BaseSGCCEntity):
+class SGCCAccountBalanceSensor(CoordinatorEntity, SensorEntity):
 
-    def __init__(self, api: SGCC, power_user: SGCCPowerUser):
-        super().__init__(api, power_user, 'balance')
+    def __init__(self, coordinator: SGCCCoordinator):
+        super().__init__(coordinator)
         self._account_balance: AccountBalance | None = None
         self._attr_name = f"账户余额(户号: {self._power_user.cons_no_dst})"
         self._attr_native_unit_of_measurement = '元'
 
+    def has_data(self):
+        return self.coordinator.data and len(self.coordinator.data) > 0
+
+    def get_account_balance(self) -> AccountBalance:
+        return self.coordinator.data[0]["account_balance"]
+
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        return self._account_balance.sum_money if self._account_balance else None
+        return self.get_account_balance().sum_money if self.has_data() else None
 
     @property
     def extra_state_attributes(self):
-        return dataclasses.asdict(self._account_balance) if self._account_balance else None
-
-    async def _do_update(self, session: ClientSession):
-        self._account_balance = await self._sgcc.get_account_balance(self._power_user, session)
+        return dataclasses.asdict(self.get_account_balance()) if self.has_data() else None
