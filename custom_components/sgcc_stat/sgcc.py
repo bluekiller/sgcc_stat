@@ -183,38 +183,30 @@ class SGCC:
         return self._keys_and_token.get('token')
 
     async def get_verification_code(self, session: ClientSession):
-        if self._data_lock:
-            await self._data_lock.acquire()
-        try:
-            username = self.username if self.username else self.account.account_name
-            if self.password:
-                hl = hashlib.md5()
-                hl.update(self.password.encode("utf-8"))
-                password = hl.hexdigest()
-            else:
-                password = self.account.password_hash
-            request = {
-                "password": password.upper(),
-                "account": username,
-                "canvasHeight": 200,
-                "canvasWidth": 410
-            }
-            response = await self._post_request("https://www.95598.cn/api/osg-web0004/open/c44/f05",
-                                                json.dumps(request), session)
-            base64_data = re.sub('^data:image/.+;base64,', '', response['data']['canvasSrc'])
-            byte_data = base64.b64decode(base64_data)
-            image_data = BytesIO(byte_data)
-            img = Image.open(image_data)
-            distance = self.onnx.get_distance(img)
-            _LOGGER.info(f"Image CaptCHA distance is {distance}.\r")
-            return {"code": distance, "login_key": response['data']['ticket']}
-        finally:
-            if self._data_lock:
-                self._data_lock.release()
+        username = self.username if self.username else self.account.account_name
+        if self.password:
+            hl = hashlib.md5()
+            hl.update(self.password.encode("utf-8"))
+            password = hl.hexdigest()
+        else:
+            password = self.account.password_hash
+        request = {
+            "password": password.upper(),
+            "account": username,
+            "canvasHeight": 200,
+            "canvasWidth": 410
+        }
+        response = await self._post_request("https://www.95598.cn/api/osg-web0004/open/c44/f05",
+                                            json.dumps(request), session)
+        base64_data = re.sub('^data:image/.+;base64,', '', response['data']['canvasSrc'])
+        byte_data = base64.b64decode(base64_data)
+        image_data = BytesIO(byte_data)
+        img = Image.open(image_data)
+        distance = self.onnx.get_distance(img)
+        _LOGGER.info(f"Image CaptCHA distance is {distance}.\r")
+        return {"code": distance, "login_key": response['data']['ticket']}
 
     async def login(self, session: ClientSession) -> SGCCAccount:
-        await self.renew_token(session)
-
         if self._data_lock:
             await self._data_lock.acquire()
         try:
