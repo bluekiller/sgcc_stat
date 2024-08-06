@@ -127,12 +127,12 @@ class PowerConsumptionSensor(CoordinatorEntity, SensorEntity):
             } if self.has_data() else None
         return None
 
-    @property
-    def last_reset(self):
-        if self._cycle == CYCLE_DAILY:
-            return datetime.datetime.strptime(self.get_consumption().day, '%Y%m%d') if self.has_data() else None
-        if self._cycle == CYCLE_MONTHLY:
-            return datetime.datetime.strptime(self.coordinator.data[-1].day, '%Y%m%d') if self.has_data() else None
+    # @property
+    # def last_reset(self):
+    #     if self._cycle == CYCLE_DAILY:
+    #         return datetime.datetime.strptime(self.get_consumption().day, '%Y%m%d') if self.has_data() else None
+    #     if self._cycle == CYCLE_MONTHLY:
+    #         return datetime.datetime.strptime(self.coordinator.data[-1].day, '%Y%m%d') if self.has_data() else None
 
 
 class SGCCAccountBalanceSensor(BaseSGCCEntity):
