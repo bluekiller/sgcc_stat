@@ -215,7 +215,7 @@ class SGCC:
             if self._data_lock:
                 await self._data_lock.acquire()
             try:
-                if self._sgcc.account and not self._sgcc.account.is_token_expired():
+                if self.account and not self.account.is_token_expired():
                     return self.account
                 username = self.username if self.username else self.account.account_name
                 if self.password:
