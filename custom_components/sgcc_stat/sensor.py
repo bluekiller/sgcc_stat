@@ -34,7 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
             entities.append(PowerConsumptionSensor(coordinator, CYCLE_DAILY))
             entities.append(PowerConsumptionSensor(coordinator, CYCLE_MONTHLY))
             # await coordinator.async_config_entry_first_refresh()
-    await async_add_entities(entities, True)
+    async_add_entities(entities, True)
     _LOGGER.debug("Sensor entry setup finished")
     return True
 

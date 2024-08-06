@@ -621,7 +621,6 @@ def _get_common_header(encrypt_keys: EncryptKeys = None, access_token: AccessTok
 
 async def get_encrypt_key(session) -> EncryptKeys:
     headers = _get_common_header()
-    session
     headers.pop("t", None)
     data = _build_generate_key_request()
     _LOGGER.debug(headers)
