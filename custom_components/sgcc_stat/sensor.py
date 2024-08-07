@@ -53,7 +53,6 @@ class SGCCUpdater:
 
     async def update_data(self):
         try:
-            await self._sgcc.renew_token(self._session)
             return await self._do_update(self._session)
         except SGCCNeedLoginError:
             await self._sgcc.login(self._session)

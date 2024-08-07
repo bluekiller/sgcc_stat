@@ -151,21 +151,19 @@ class SGCC:
         path = os.path.join(component_dir, 'captcha.onnx')
         self.onnx = ONNX(path)
 
-    async def renew_token(self, session):
+    async def renew_keys(self, session):
         if self._data_lock:
             await self._data_lock.acquire()
         try:
-            keys: EncryptKeys = self._get_keys()
-            token: AccessToken = self._get_token()
-            if not keys:
-                keys = await get_encrypt_key(session)
-                self._keys_and_token['keys'] = keys
+            # token: AccessToken = self._get_token()
+            keys = await get_encrypt_key(session)
+            self._keys_and_token['keys'] = keys
 
-            if (token is None or token.expired()) and self.account and not self.account.is_token_expired():
-                _LOGGER.info("trying to renew access token")
-                auth_code = await get_auth_code(keys, self.account.token, session)
-                token = await get_auth_token(keys, auth_code, session)
-                self._keys_and_token['token'] = token
+            # if (token is None or token.expired()) and self.account and not self.account.is_token_expired():
+            #     _LOGGER.info("trying to renew access token")
+            #     auth_code = await get_auth_code(keys, self.account.token, session)
+            #     token = await get_auth_token(keys, auth_code, session)
+            #     self._keys_and_token['token'] = token
 
         finally:
             if self._data_lock:
@@ -218,6 +216,7 @@ class SGCC:
 
     async def login(self, session: ClientSession) -> SGCCAccount:
         attempt = 0
+        await self.renew_keys(session)
         while attempt < MAX_RETRIES:
             attempt += 1
             if self._data_lock:
