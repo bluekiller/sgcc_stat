@@ -4,9 +4,9 @@ from typing import Any
 
 import aiohttp
 from dacite import from_dict
-from homeassistant.components.sensor import STATE_CLASS_TOTAL_INCREASING, SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import DEVICE_CLASS_ENERGY, ENERGY_KILO_WATT_HOUR
+from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
@@ -99,9 +99,9 @@ class PowerConsumptionSensor(CoordinatorEntity, SensorEntity):
         self._consumption: DailyPowerConsumption | None = None
         self._attr_unique_id = f"{coordinator.power_user.id}_{cycle}_consumption"
         self._attr_name = f"{CYCLE_NAME.get(cycle)}用电量(户号: {coordinator.power_user.cons_no_dst})"
-        self._attr_device_class = DEVICE_CLASS_ENERGY
-        self._attr_state_class = STATE_CLASS_TOTAL_INCREASING
-        self._attr_native_unit_of_measurement = ENERGY_KILO_WATT_HOUR
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
 
     def has_data(self):
         return self.coordinator.data and len(self.coordinator.data['daily_usage']) > 0
@@ -150,6 +150,9 @@ class SGCCAccountBalanceSensor(CoordinatorEntity, SensorEntity):
         self._account_balance: AccountBalance | None = None
         self._attr_name = f"账户余额(户号: {coordinator.power_user.cons_no_dst})"
         self._attr_native_unit_of_measurement = '元'
+        self._attr_unique_id = f"{coordinator.power_user.id}_account_balance"
+        self._attr_device_class = SensorDeviceClass.MONETARY
+        self._attr_state_class = SensorStateClass.TOTAL
 
     def has_data(self):
         return self.coordinator.data and self.coordinator.data["account_balance"]
