@@ -4,7 +4,7 @@ import dataclasses
 import os
 import re
 from dataclasses import dataclass
-import datetime
+from datetime import datetime, timezone
 import hashlib
 import json
 import logging
@@ -68,7 +68,7 @@ class AccessToken(Updatable):
     expire_time: str
 
     def expired(self) -> bool:
-        return datetime.datetime.fromisoformat(self.expire_time) > datetime.datetime.now()
+        return datetime.fromisoformat(self.expire_time) > datetime.now()
 
 
 @dataclass
@@ -94,7 +94,9 @@ class SGCCAccount:
     power_users: List[SGCCPowerUser] = dataclasses.field(default_factory=list)
 
     def is_token_expired(self):
-        return datetime.datetime.fromisoformat(self.token_expiration_date) < datetime.datetime.now()
+        token_expiration = datetime.fromisoformat(self.token_expiration_date)
+        current_time = datetime.now(timezone.utc).astimezone(token_expiration.tzinfo)
+        return token_expiration < current_time
 
 
 @dataclass
@@ -271,8 +273,9 @@ class SGCC:
                     account_name=user_info['loginAccount'],
                     user_id=user_info['userId'],
                     token=r['data']['bizrt']['token'],
-                    token_expiration_date=gmt_plus_8.localize(datetime.datetime.strptime(r['data']['bizrt']['expirationDate'],
-                                                                     '%Y%m%d%H%M')).isoformat()
+                    token_expiration_date=gmt_plus_8.localize(
+                        datetime.strptime(r['data']['bizrt']['expirationDate'],
+                                          '%Y%m%d%H%M')).isoformat()
                 )
                 auth_code = await get_auth_code(self._get_keys(), account.token, session)
                 access_token = await get_auth_token(self._get_keys(), auth_code, session)
@@ -681,7 +684,7 @@ async def get_auth_token(encrypt_keys: EncryptKeys, authorize_code: str, session
         decrypted_data = EncryptUtil.decrypt_sm4_js_data(json.loads(resp_txt)['encryptData'], encrypt_keys.key_code)
         _LOGGER.debug("get_auth_token result: %s", decrypted_data)
         return AccessToken(decrypted_data['data']['access_token'], APP_KEY,
-                           datetime.datetime.fromtimestamp(
+                           datetime.fromtimestamp(
                                time.time() + int(decrypted_data['data']['expiresIn'])).isoformat())
 
 
