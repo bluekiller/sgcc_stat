@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import dataclasses
+import logging
+import datetime
 from typing import Any
-
 import aiohttp
+from aiohttp import ClientSession
 from dacite import from_dict
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
@@ -14,11 +18,10 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator, UpdateFailed,
 )
 from .const import *
-from .sgcc import *
+from .sgcc import SGCCAccount, SGCC, SGCCPowerUser, DailyPowerConsumption, AccountBalance, SGCCNeedLoginError
 
 _LOGGER = logging.getLogger(__name__)
 _LOCK = asyncio.Lock()
-SCAN_INTERVAL = datetime.timedelta(minutes=30)
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
