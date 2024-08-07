@@ -272,7 +272,7 @@ class SGCC:
                     user_id=user_info['userId'],
                     token=r['data']['bizrt']['token'],
                     token_expiration_date=gmt_plus_8.localize(datetime.datetime.strptime(r['data']['bizrt']['expirationDate'],
-                                                                     '%Y%m%d%H%M').timetz()).isoformat()
+                                                                     '%Y%m%d%H%M')).isoformat()
                 )
                 auth_code = await get_auth_code(self._get_keys(), account.token, session)
                 access_token = await get_auth_token(self._get_keys(), auth_code, session)
