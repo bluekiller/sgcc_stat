@@ -95,7 +95,11 @@ class SGCCAccount:
 
     def is_token_expired(self):
         token_expiration = datetime.fromisoformat(self.token_expiration_date)
+        _LOGGER.debug(token_expiration)
+        if token_expiration.tzinfo is None:
+            return token_expiration < datetime.now()
         current_time = datetime.now(timezone.utc).astimezone(token_expiration.tzinfo)
+        _LOGGER.debug(current_time)
         return token_expiration < current_time
 
 
