@@ -11,6 +11,8 @@ import logging
 import time
 from io import BytesIO
 from typing import List
+
+import pytz
 from PIL import Image
 from aiohttp import ClientSession
 from gmssl import func
@@ -262,13 +264,15 @@ class SGCC:
                     raise SGCCLoginError(message)
 
                 user_info = r['data']['bizrt']['userInfo'][0]
+                # Timezone GMT+8
+                gmt_plus_8 = pytz.timezone('Asia/Shanghai')
                 account = SGCCAccount(
                     password_hash=password,
                     account_name=user_info['loginAccount'],
                     user_id=user_info['userId'],
                     token=r['data']['bizrt']['token'],
-                    token_expiration_date=datetime.datetime.strptime(r['data']['bizrt']['expirationDate'],
-                                                                     '%Y%m%d%H%M').isoformat()
+                    token_expiration_date=gmt_plus_8.localize(datetime.datetime.strptime(r['data']['bizrt']['expirationDate'],
+                                                                     '%Y%m%d%H%M').timetz()).isoformat()
                 )
                 auth_code = await get_auth_code(self._get_keys(), account.token, session)
                 access_token = await get_auth_token(self._get_keys(), auth_code, session)
