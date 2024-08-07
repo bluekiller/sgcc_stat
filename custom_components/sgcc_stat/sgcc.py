@@ -624,7 +624,7 @@ def _get_common_header(encrypt_keys: EncryptKeys = None, access_token: AccessTok
     }
     if encrypt_keys:
         headers['keyCode'] = encrypt_keys.key_code
-    if account:
+    if account and not account.is_token_expired():
         headers['t'] = account.token[:int(len(account.token) / 2)]
     if access_token:
         length = len(access_token.access_token)
