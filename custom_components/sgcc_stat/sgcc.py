@@ -556,10 +556,10 @@ class EncryptUtil:
     def encrypt_request(request, encrypt_keys: EncryptKeys, auth_token: AccessToken, account: SGCCAccount = None):
         public_key = encrypt_keys.public_key
         access_token = ""
-        if auth_token:
+        if auth_token and not account.is_token_expired():
             access_token = auth_token.access_token
         token = ''
-        if account:
+        if account and not account.is_token_expired():
             token = account.token
         timestamp = _get_time_stamp()
         request = '{"_access_token": "' + access_token[int(len(access_token) / 2):] + '","_t": "' + token[int(len(
@@ -626,7 +626,7 @@ def _get_common_header(encrypt_keys: EncryptKeys = None, access_token: AccessTok
         headers['keyCode'] = encrypt_keys.key_code
     if account and not account.is_token_expired():
         headers['t'] = account.token[:int(len(account.token) / 2)]
-    if access_token:
+    if access_token and not account.is_token_expired():
         length = len(access_token.access_token)
         headers['accessToken'] = access_token.access_token
         headers['Authorization'] = 'Bearer ' + access_token.access_token[:int(length / 2)]
