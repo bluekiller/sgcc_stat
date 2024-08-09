@@ -32,7 +32,7 @@ class SGCCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: Dict[str, str] = {}
         desc = '登录我的95588'
         if user_input is not None:
-            session = await async_get_clientsession(self.hass)
+            session = async_get_clientsession(self.hass)
             try:
                 sgcc = SGCC(
                     user_input[CONF_USERNAME],

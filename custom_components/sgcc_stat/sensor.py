@@ -52,7 +52,7 @@ class SGCCUpdater:
         ...
 
     async def update_data(self):
-        session = await async_get_clientsession(self._hass)
+        session = async_get_clientsession(self._hass)
         try:
             return await self._do_update(session)
         except SGCCNeedLoginError:
