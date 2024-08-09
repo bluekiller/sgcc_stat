@@ -6,12 +6,12 @@ import datetime
 import logging
 from typing import Any, List
 
-import aiohttp
 from aiohttp import ClientSession
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -28,7 +28,7 @@ _LOCK = asyncio.Lock()
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
     """Set up sensors for the integration."""
     _LOGGER.debug("Setting up sensor entry with config: %s", config_entry.data)
-    coordinators: List[SGCCCoordinator] = hass.data[DOMAIN][config_entry.entry_id]['coordinators']
+    coordinators: List[SGCCCoordinator] = hass.data[DOMAIN][config_entry.entry_id][DATA_COORDINATORS]
     if not coordinators:
         _LOGGER.warning("No coordinators found for config entry %s", config_entry.entry_id)
         return False
@@ -44,25 +44,26 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry, asyn
 
 class SGCCUpdater:
 
-    def __init__(self, api: SGCC):
+    def __init__(self, api: SGCC, hass: HomeAssistant):
         self._sgcc = api
-        self._session = aiohttp.ClientSession()
+        self._hass = hass
 
     async def _do_update(self, session: ClientSession) -> Any:
         ...
 
     async def update_data(self):
+        session = await async_get_clientsession(self._hass)
         try:
-            return await self._do_update(self._session)
+            return await self._do_update(session)
         except SGCCNeedLoginError:
-            await self._sgcc.login(self._session)
-            return await self._do_update(self._session)
+            await self._sgcc.login(session)
+            return await self._do_update(session)
 
 
 class SGCCCoordinator(SGCCUpdater, DataUpdateCoordinator):
 
     def __init__(self, api: SGCC, power_user: SGCCPowerUser, hass: HomeAssistant):
-        SGCCUpdater.__init__(self, api)
+        SGCCUpdater.__init__(self, api, hass)
         DataUpdateCoordinator.__init__(self, hass, _LOGGER, name='sgcc_power_consumption_sensor',
                                        update_interval=datetime.timedelta(hours=UPDATE_INTERVAL))
         self.power_user = power_user

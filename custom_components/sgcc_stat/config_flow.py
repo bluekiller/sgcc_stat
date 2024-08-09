@@ -2,11 +2,11 @@ import dataclasses
 import logging
 from typing import Any, Dict, Optional
 
-import aiohttp
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, DATA_ACCOUNT, DATA_KEYS, DATA_TOKEN
 from .sgcc import SGCC, SGCCLoginError
@@ -31,17 +31,16 @@ class SGCCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Invoked when a user initiates a flow via the user interface."""
         errors: Dict[str, str] = {}
         desc = '登录我的95588'
-        session = aiohttp.ClientSession()
         if user_input is not None:
+            session = await async_get_clientsession(self.hass)
             try:
                 sgcc = SGCC(
                     user_input[CONF_USERNAME],
-                    user_input[CONF_PASSWORD],
-                    keys_and_token=self.hass.data
+                    user_input[CONF_PASSWORD]
                 )
-                self.data['sgcc'] = sgcc
                 await sgcc.login(session)
                 await sgcc.search_user(session)
+                self.data['sgcc'] = sgcc
             except SGCCLoginError as e:
                 errors['base'] = 'invalid_auth'
                 desc = '错误信息：\n' + e.msg
