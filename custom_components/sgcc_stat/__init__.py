@@ -47,7 +47,7 @@ async def async_setup_entry(
         DATA_TOKEN: dataclasses.asdict(keys_and_token[DATA_TOKEN]),
         DATA_ACCOUNT: dataclasses.asdict(api.account)
     }
-    await hass.config_entries.async_update_entry(entry, data=new_data)
+    hass.config_entries.async_update_entry(entry, data=new_data)
 
     # Forward the setup to the sensor platform.
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
