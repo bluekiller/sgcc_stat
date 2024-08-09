@@ -1,14 +1,14 @@
 import asyncio
 import base64
 import dataclasses
-import os
-import re
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
 import logging
+import os
+import re
 import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import List
 
@@ -19,6 +19,8 @@ from gmssl import func
 from gmssl.sm2 import CryptSM2
 from gmssl.sm3 import sm3_hash
 from gmssl.sm4 import SM4_DECRYPT, SM4_ENCRYPT, CryptSM4
+
+from .const import MAX_RETRIES, RETRY_DELAY, DATA_KEYS, DATA_TOKEN
 from .onnx import ONNX
 
 SM4_KEY = '54fe588bf24b88f09e7ff0b2da2d27a8'
@@ -133,10 +135,6 @@ class DailyPowerConsumption:
     t_pq: float
 
 
-MAX_RETRIES = 3  # Maximum number of retries
-RETRY_DELAY = 5  # Delay between retries in seconds
-
-
 class SGCC:
     def __init__(self, username: str = None, password: str = None, account: SGCCAccount = None,
                  data_lock: asyncio.Lock = None, keys_and_token=None):
@@ -157,7 +155,7 @@ class SGCC:
         try:
             # token: AccessToken = self._get_token()
             keys = await get_encrypt_key(session)
-            self._keys_and_token['keys'] = keys
+            self._keys_and_token[DATA_KEYS] = keys
 
             # if (token is None or token.expired()) and self.account and not self.account.is_token_expired():
             #     _LOGGER.info("trying to renew access token")
@@ -170,25 +168,25 @@ class SGCC:
                 self._data_lock.release()
 
     async def _post_request(self, url: str, request: str, session: ClientSession) -> dict:
-        headers = _get_common_header(self._get_keys(), self._get_token(), self.account)
+        headers = _get_common_header(self.get_keys(), self.get_token(), self.account)
         _LOGGER.debug("post request to %s", url)
         _LOGGER.debug("headers: %s", headers)
         _LOGGER.debug("original request: %s", request)
-        encrypted_request = EncryptUtil.encrypt_request(request, self._get_keys(), self._get_token(), self.account)
+        encrypted_request = EncryptUtil.encrypt_request(request, self.get_keys(), self.get_token(), self.account)
         _LOGGER.debug("encrypted request: %s", encrypted_request)
         async with session.post(url, data=encrypted_request, headers=headers) as r:
             resp_txt = await r.text()
             _LOGGER.debug("original response: %s", resp_txt)
             resp_json = json.loads(resp_txt)
-            response = EncryptUtil.decrypt_sm4_js_data(resp_json['encryptData'], self._get_keys().key_code)
+            response = EncryptUtil.decrypt_sm4_js_data(resp_json['encryptData'], self.get_keys().key_code)
             _LOGGER.debug("decrypted response: %s", response)
             return response
 
-    def _get_keys(self) -> EncryptKeys:
-        return self._keys_and_token.get('keys')
+    def get_keys(self) -> EncryptKeys:
+        return self._keys_and_token.get(DATA_KEYS)
 
-    def _get_token(self) -> AccessToken:
-        return self._keys_and_token.get('token')
+    def get_token(self) -> AccessToken:
+        return self._keys_and_token.get(DATA_TOKEN)
 
     async def get_verification_code(self, session: ClientSession):
         username = self.username if self.username else self.account.account_name
@@ -280,8 +278,8 @@ class SGCC:
                         datetime.strptime(r['data']['bizrt']['expirationDate'],
                                           '%Y%m%d%H%M')).isoformat()
                 )
-                auth_code = await get_auth_code(self._get_keys(), account.token, session)
-                access_token = await get_auth_token(self._get_keys(), auth_code, session)
+                auth_code = await get_auth_code(self.get_keys(), account.token, session)
+                access_token = await get_auth_token(self.get_keys(), auth_code, session)
                 self._keys_and_token["token"] = access_token
                 self.account = account
                 return account

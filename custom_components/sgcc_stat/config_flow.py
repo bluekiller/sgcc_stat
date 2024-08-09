@@ -3,12 +3,12 @@ import logging
 from typing import Any, Dict, Optional
 
 import aiohttp
-from homeassistant import config_entries
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
+from homeassistant import config_entries
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
-from .const import DOMAIN
+from .const import DOMAIN, DATA_ACCOUNT, DATA_KEYS, DATA_TOKEN
 from .sgcc import SGCC, SGCCLoginError
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,7 +60,9 @@ class SGCCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.info("async_step_select %s", user_input)
             return self.async_create_entry(title=sgcc.account.account_name, data={
                 'selected_power_users': user_input['list'],
-                'account': dataclasses.asdict(sgcc.account)
+                DATA_ACCOUNT: dataclasses.asdict(sgcc.account),
+                DATA_KEYS: dataclasses.asdict(sgcc.get_keys()),
+                DATA_TOKEN: dataclasses.asdict(sgcc.get_token())
             })
 
         lst = {}
