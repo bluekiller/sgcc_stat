@@ -9,7 +9,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, DATA_ACCOUNT, DATA_KEYS, DATA_TOKEN
-from .sgcc import SGCC, SGCCLoginError
+from .sgcc import SGCC, SGCCLoginError, SGCCPowerUser
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class SGCCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     user_input[CONF_PASSWORD]
                 )
                 await sgcc.login(session)
-                await sgcc.search_user(session)
+                self.data['power_users'] = await sgcc.search_user(session)
                 self.data['sgcc'] = sgcc
             except SGCCLoginError as e:
                 errors['base'] = 'invalid_auth'
@@ -55,6 +55,7 @@ class SGCCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """选择用电户号"""
         errors: Dict[str, str] = {}
         sgcc: SGCC = self.data['sgcc']
+        power_users: list[SGCCPowerUser] = self.data['power_users']
         if user_input is not None:
             _LOGGER.info("async_step_select %s", user_input)
             return self.async_create_entry(title=sgcc.account.account_name, data={
@@ -65,7 +66,7 @@ class SGCCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             })
 
         lst = {}
-        for _ in sgcc.account.power_users:
+        for _ in power_users:
             lst[_.id] = _.cons_no_dst
         schema = vol.Schema({"list": cv.multi_select(lst)})
         return self.async_show_form(

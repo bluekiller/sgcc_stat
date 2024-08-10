@@ -93,7 +93,6 @@ class SGCCAccount:
     token: str
     token_expiration_date: str
     password_hash: str
-    power_users: List[SGCCPowerUser] = dataclasses.field(default_factory=list)
 
     def is_token_expired(self):
         token_expiration = datetime.fromisoformat(self.token_expiration_date)
@@ -406,6 +405,7 @@ class SGCC:
                                      json.dumps(request), session)
         if r['code'] != 1 or r['data']['srvrt']['resultCode'] != '0000':
             raise SGCCError(r['data']['srvrt']['resultMessage'])
+        power_users = []
         for _ in r['data']['bizrt']['powerUserList']:
             power_user = SGCCPowerUser(
                 id=_['userId'],
@@ -418,7 +418,8 @@ class SGCC:
                 cons_no=_['consNo'],
                 cons_no_dst=_['consNo_dst']
             )
-            self.account.power_users.append(power_user)
+            power_users.append(power_user)
+        return power_users
 
     async def get_daily_usage(
             self, power_user: SGCCPowerUser, start: datetime.date, end: datetime.date

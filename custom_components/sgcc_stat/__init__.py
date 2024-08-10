@@ -1,14 +1,16 @@
 import dataclasses
 import logging
+from typing import List
 
 from dacite import from_dict
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN, DATA_COORDINATORS, DATA_KEYS, DATA_TOKEN, DATA_ACCOUNT
+from .const import DOMAIN, DATA_COORDINATORS, DATA_KEYS, DATA_TOKEN, DATA_ACCOUNT, DATA_POWER_USERS
 from .sensor import SGCCCoordinator, _LOCK
-from .sgcc import AccessToken, EncryptKeys, SGCCAccount, SGCC
+from .sgcc import AccessToken, EncryptKeys, SGCCAccount, SGCC, SGCCPowerUser
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,8 +35,11 @@ async def async_setup_entry(
         DATA_TOKEN: from_dict(AccessToken, entry.data.get(DATA_TOKEN)) if entry.data.get(
             DATA_TOKEN) else None
     }
+    power_users_data: list = entry.data.get(DATA_POWER_USERS)
+    power_users: List[SGCCPowerUser] = [from_dict(SGCCPowerUser, user) for user in
+                                        power_users_data] if power_users_data else None
 
-    api, coordinators = await _initialize_coordinators(hass, account, keys_and_token, entry)
+    api, coordinators = await _initialize_coordinators(hass, account, power_users, keys_and_token, entry)
 
     if not coordinators:
         _LOGGER.error("No valid coordinators found during setup.")
@@ -57,14 +62,22 @@ async def async_setup_entry(
 async def _initialize_coordinators(
         hass: HomeAssistant,
         account: SGCCAccount,
+        power_users: list[SGCCPowerUser],
         keys_and_token: dict,
         entry: config_entries.ConfigEntry
 ) -> tuple:
     """Initialize and refresh coordinators."""
     api = SGCC(account=account, keys_and_token=keys_and_token, data_lock=_LOCK)
+    session = async_get_clientsession(hass)
     coordinators = []
-
-    for user in account.power_users:
+    if not power_users:
+        try:
+            await api.login()
+            power_users = await api.search_user(session)
+        except Exception as e:
+            _LOGGER.error("Failed to get power users: %s", str(e))
+            raise ConfigEntryNotReady from e
+    for user in power_users:
         if user.id in entry.data.get('selected_power_users'):
             _LOGGER.debug("Initializing coordinator for user %s", user.id)
             coordinator = SGCCCoordinator(api, user, hass)
