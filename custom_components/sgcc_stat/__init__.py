@@ -44,7 +44,7 @@ async def async_setup_entry(
 
     if not power_users:
         try:
-            await api.login()
+            await api.login(session)
             power_users = await api.search_user(session)
         except Exception as e:
             _LOGGER.error("Failed to get power users: %s", str(e))
