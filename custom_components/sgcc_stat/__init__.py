@@ -39,7 +39,18 @@ async def async_setup_entry(
     power_users: List[SGCCPowerUser] = [from_dict(SGCCPowerUser, user) for user in
                                         power_users_data] if power_users_data else None
 
-    api, coordinators = await _initialize_coordinators(hass, account, power_users, keys_and_token, entry)
+    api = SGCC(account=account, keys_and_token=keys_and_token, data_lock=_LOCK)
+    session = async_get_clientsession(hass)
+
+    if not power_users:
+        try:
+            await api.login()
+            power_users = await api.search_user(session)
+        except Exception as e:
+            _LOGGER.error("Failed to get power users: %s", str(e))
+            raise ConfigEntryNotReady from e
+
+    coordinators = await _initialize_coordinators(hass, api, power_users, entry)
 
     if not coordinators:
         _LOGGER.error("No valid coordinators found during setup.")
@@ -50,7 +61,8 @@ async def async_setup_entry(
         **entry.data,
         DATA_KEYS: dataclasses.asdict(keys_and_token[DATA_KEYS]),
         DATA_TOKEN: dataclasses.asdict(keys_and_token[DATA_TOKEN]),
-        DATA_ACCOUNT: dataclasses.asdict(api.account)
+        DATA_ACCOUNT: dataclasses.asdict(api.account),
+        DATA_POWER_USERS: [dataclasses.asdict(user) for user in power_users]
     }
     hass.config_entries.async_update_entry(entry, data=new_data)
 
@@ -61,22 +73,12 @@ async def async_setup_entry(
 
 async def _initialize_coordinators(
         hass: HomeAssistant,
-        account: SGCCAccount,
+        api: SGCC,
         power_users: list[SGCCPowerUser],
-        keys_and_token: dict,
         entry: config_entries.ConfigEntry
 ) -> tuple:
     """Initialize and refresh coordinators."""
-    api = SGCC(account=account, keys_and_token=keys_and_token, data_lock=_LOCK)
-    session = async_get_clientsession(hass)
     coordinators = []
-    if not power_users:
-        try:
-            await api.login()
-            power_users = await api.search_user(session)
-        except Exception as e:
-            _LOGGER.error("Failed to get power users: %s", str(e))
-            raise ConfigEntryNotReady from e
     for user in power_users:
         if user.id in entry.data.get('selected_power_users'):
             _LOGGER.debug("Initializing coordinator for user %s", user.id)

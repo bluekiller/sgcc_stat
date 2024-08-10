@@ -8,7 +8,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN, DATA_ACCOUNT, DATA_KEYS, DATA_TOKEN
+from .const import DOMAIN, DATA_ACCOUNT, DATA_KEYS, DATA_TOKEN, DATA_POWER_USERS
 from .sgcc import SGCC, SGCCLoginError, SGCCPowerUser
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,7 +62,8 @@ class SGCCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 'selected_power_users': user_input['list'],
                 DATA_ACCOUNT: dataclasses.asdict(sgcc.account),
                 DATA_KEYS: dataclasses.asdict(sgcc.get_keys()),
-                DATA_TOKEN: dataclasses.asdict(sgcc.get_token())
+                DATA_TOKEN: dataclasses.asdict(sgcc.get_token()),
+                DATA_POWER_USERS: [dataclasses.asdict(user) for user in power_users]
             })
 
         lst = {}
